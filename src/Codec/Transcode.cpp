@@ -17,42 +17,43 @@ AVFrame *FFmpegFrame::get() const{
 
 ///////////////////////////////////////////////////////////////////////////
 
-template<typename ...ARGS>
+template<bool decoder = true, typename ...ARGS>
 AVCodec *getCodecByName(ARGS ...names);
 
-template<typename ...ARGS>
+template<bool decoder = true, typename ...ARGS>
 AVCodec *getCodecByName(const char *name) {
-    auto codec = avcodec_find_decoder_by_name(name);
+    auto codec = decoder ? avcodec_find_decoder_by_name(name) : avcodec_find_encoder_by_name(name);
     if (codec) {
-        InfoL << "got decoder:" << name;
+        InfoL << (decoder ? "got decoder:" : "got encoder:") << name;
     }
     return codec;
 }
 
-template<typename ...ARGS>
+template<bool decoder = true, typename ...ARGS>
 AVCodec *getCodecByName(const char *name, ARGS ...names) {
-    auto codec = getCodecByName(names...);
+    auto codec = getCodecByName<decoder>(names...);
     if (codec) {
         return codec;
     }
-    return getCodecByName(name);
+    return getCodecByName<decoder>(name);
 }
 
+template<bool decoder = true>
 AVCodec *getCodec(enum AVCodecID id) {
-    auto codec = avcodec_find_decoder(id);
+    auto codec = decoder ? avcodec_find_decoder(id) : avcodec_find_encoder(id);
     if (codec) {
-        InfoL << "got decoder:" << avcodec_get_name(id);
+        InfoL << (decoder ? "got decoder:" : "got encoder:") << avcodec_get_name(id);
     }
     return codec;
 }
 
-template<typename ...ARGS>
+template<bool decoder = true, typename ...ARGS>
 AVCodec *getCodec(enum AVCodecID id, ARGS ...names) {
-    auto codec = getCodecByName(names...);
+    auto codec = getCodecByName<decoder>(names...);
     if (codec) {
         return codec;
     }
-    return getCodec(id);
+    return getCodec<decoder>(id);
 }
 
 FFmpegDecoder::FFmpegDecoder(const Track::Ptr &track) {
