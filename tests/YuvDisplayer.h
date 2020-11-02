@@ -10,8 +10,10 @@
 
 #ifndef YUVDISPLAYER_H_
 #define YUVDISPLAYER_H_
+
 #include <stdexcept>
 #include "Util/onceToken.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -30,19 +32,39 @@ using namespace mediakit;
 
 #define REFRESH_EVENT   (SDL_USEREVENT + 1)
 
-
-class SDLDisplayerHelper
-{
+class SDLDisplayerHelper {
 public:
-    static SDLDisplayerHelper &Instance(){
+    static void initSDL() {
+        static onceToken token([]() {
+            if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO) == -1) {
+                string err = "初始化SDL失败:";
+                err += SDL_GetError();
+                ErrorL << err;
+                throw std::runtime_error(err);
+            }
+            SDL_LogSetAllPriority(SDL_LOG_PRIORITY_CRITICAL);
+            SDL_LogSetOutputFunction([](void *userdata, int category, SDL_LogPriority priority, const char *message) {
+                DebugL << category << " " << priority << message;
+            }, nullptr);
+            InfoL << "SDL_Init";
+        }, []() {
+            SDLDisplayerHelper::Destory();
+            SDL_Quit();
+        });
+    }
+
+    static SDLDisplayerHelper &Instance() {
+        initSDL();
         static SDLDisplayerHelper *instance(new SDLDisplayerHelper);
         return *instance;
     }
-    static void Destory(){
+
+    static void Destory() {
         delete &Instance();
     }
+
     template<typename FUN>
-    void doTask(FUN &&f){
+    void doTask(FUN &&f) {
         {
             lock_guard<mutex> lck(_mtxTask);
             _taskList.emplace_back(f);
@@ -52,17 +74,17 @@ public:
         SDL_PushEvent(&event);
     }
 
-    void runLoop(){
+    void runLoop() {
         bool flag = true;
-        std::function<bool ()> task;
+        std::function<bool()> task;
         SDL_Event event;
-        while(flag){
+        while (flag) {
             SDL_WaitEvent(&event);
-            switch (event.type){
-                case REFRESH_EVENT:{
+            switch (event.type) {
+                case REFRESH_EVENT: {
                     {
                         lock_guard<mutex> lck(_mtxTask);
-                        if(_taskList.empty()){
+                        if (_taskList.empty()) {
                             //not reachable
                             continue;
                         }
@@ -71,57 +93,42 @@ public:
                     }
                     flag = task();
                     break;
+                }
+
                 case SDL_QUIT:
                     InfoL << event.type;
                     return;
-                }
                 default:
                     break;
             }
         }
     }
 
-    void shutdown(){
-        doTask([](){return false;});
+    void shutdown() {
+        doTask([]() { return false; });
     }
+
 private:
-    SDLDisplayerHelper(){
-    };
-    ~SDLDisplayerHelper(){
+    SDLDisplayerHelper() {}
+
+    ~SDLDisplayerHelper() {
         shutdown();
-    };
+    }
+
 private:
-    std::deque<std::function<bool ()> > _taskList;
     std::mutex _mtxTask;
-
+    std::deque<std::function<bool()> > _taskList;
 };
-
 
 class YuvDisplayer {
 public:
-    YuvDisplayer(void *hwnd = nullptr,const char *title = "untitled"){
-
-        static onceToken token([]() {
-            if(SDL_Init(SDL_INIT_VIDEO|SDL_INIT_AUDIO) == -1) {
-                string err = "初始化SDL失败:";
-                err+= SDL_GetError();
-                ErrorL << err;
-                throw std::runtime_error(err);
-            }
-            SDL_LogSetAllPriority(SDL_LOG_PRIORITY_CRITICAL);
-            SDL_LogSetOutputFunction([](void *userdata, int category, SDL_LogPriority priority, const char *message){
-                DebugL << category << " " <<  priority << message;
-            },nullptr);
-            InfoL << "SDL_Init";
-        }, []() {
-            SDLDisplayerHelper::Destory();
-            SDL_Quit();
-        });
-
+    YuvDisplayer(void *hwnd = nullptr, const char *title = "untitled") {
         _title = title;
         _hwnd = hwnd;
+        SDLDisplayerHelper::initSDL();
     }
-    virtual ~YuvDisplayer(){
+
+    virtual ~YuvDisplayer() {
         if (_texture) {
             SDL_DestroyTexture(_texture);
             _texture = nullptr;
@@ -135,11 +142,12 @@ public:
             _win = nullptr;
         }
     }
-    bool displayYUV(AVFrame *pFrame){
+
+    bool displayYUV(AVFrame *pFrame) {
         if (!_win) {
             if (_hwnd) {
                 _win = SDL_CreateWindowFrom(_hwnd);
-            }else {
+            } else {
                 _win = SDL_CreateWindow(_title.data(),
                                         SDL_WINDOWPOS_UNDEFINED,
                                         SDL_WINDOWPOS_UNDEFINED,
@@ -148,7 +156,7 @@ public:
                                         SDL_WINDOW_OPENGL);
             }
         }
-        if (_win && ! _render){
+        if (_win && !_render) {
 #if 0
             SDL_RENDERER_SOFTWARE = 0x00000001,         /**< The renderer is a software fallback */
                     SDL_RENDERER_ACCELERATED = 0x00000002,      /**< The renderer uses hardware
@@ -181,12 +189,13 @@ public:
         }
         return false;
     }
+
 private:
     string _title;
+    void *_hwnd = nullptr;
     SDL_Window *_win = nullptr;
     SDL_Renderer *_render = nullptr;
     SDL_Texture *_texture = nullptr;
-    void *_hwnd = nullptr;
 };
 
 #endif /* YUVDISPLAYER_H_ */

@@ -15,9 +15,9 @@
 #include "Rtsp/UDPServer.h"
 #include "Player/MediaPlayer.h"
 #include "Util/onceToken.h"
-#include "FFMpegDecoder.h"
 #include "YuvDisplayer.h"
 #include "Extension/H265.h"
+#include "Codec/Transcode.h"
 
 using namespace std;
 using namespace toolkit;
@@ -100,56 +100,55 @@ int main(int argc, char *argv[]) {
 
     }
 
+    FFmpegDecoder::Ptr video_decoder, audio_decoder;
+    std::shared_ptr<YuvDisplayer> displayer;
     MediaPlayer::Ptr player(new MediaPlayer());
     weak_ptr<MediaPlayer> weakPlayer = player;
-    player->setOnPlayResult([weakPlayer](const SockException &ex) {
+    player->setOnPlayResult([weakPlayer, &video_decoder, &audio_decoder, &displayer](const SockException &ex) {
         InfoL << "OnPlayResult:" << ex.what();
         auto strongPlayer = weakPlayer.lock();
         if (ex || !strongPlayer) {
             return;
         }
 
-        auto viedoTrack = strongPlayer->getTrack(TrackVideo, false);
-        if (!viedoTrack) {
-            WarnL << "没有视频!";
-            return;
+        {
+            auto videoTrack = strongPlayer->getTrack(TrackVideo, false);
+            if (videoTrack) {
+                video_decoder = std::make_shared<FFmpegDecoder>(videoTrack);
+                video_decoder->setOnDecode([&displayer](const FFmpegFrame::Ptr &frame) {
+                    if (!displayer) {
+                        displayer = std::make_shared<YuvDisplayer>(nullptr, url);
+                    }
+                    SDLDisplayerHelper::Instance().doTask([frame, displayer]() {
+                        displayer->displayYUV(frame->get());
+                        return true;
+                    });
+                });
+                videoTrack->addDelegate(std::make_shared<FrameWriterInterfaceHelper>([&video_decoder](const Frame::Ptr &frame) {
+                    video_decoder->inputFrame(frame);
+                }));
+            }
         }
 
-        AnyStorage::Ptr storage(new AnyStorage);
-        viedoTrack->addDelegate(std::make_shared<FrameWriterInterfaceHelper>([storage](const Frame::Ptr &frame_in) {
-            auto frame = Frame::getCacheAbleFrame(frame_in);
-            SDLDisplayerHelper::Instance().doTask([frame,storage]() {
-                auto &decoder = (*storage)["decoder"];
-                auto &displayer = (*storage)["displayer"];
-                auto &merger = (*storage)["merger"];
-                if(!decoder){
-                    decoder.set<FFMpegDecoder>(frame->getCodecId());
-                }
-                if(!displayer){
-                    displayer.set<YuvDisplayer>(nullptr,url);
-                }
-                if(!merger){
-                    merger.set<FrameMerger>();
-                }
-                merger.get<FrameMerger>().inputFrame(frame,[&](uint32_t dts,uint32_t pts,const Buffer::Ptr &buffer){
-                    AVFrame *pFrame = nullptr;
-                    bool flag = decoder.get<FFMpegDecoder>().inputVideo((unsigned char *) buffer->data(), buffer->size(), dts, &pFrame);
-                    if (flag) {
-                        displayer.get<YuvDisplayer>().displayYUV(pFrame);
-                    }
+        {
+            auto audioTrack = strongPlayer->getTrack(TrackAudio, false);
+            if (audioTrack) {
+                audio_decoder = std::make_shared<FFmpegDecoder>(audioTrack);
+                audio_decoder->setOnDecode([](const FFmpegFrame::Ptr &frame){
+                    //todo, play audio
                 });
-                return true;
-            });
-        }));
+                audioTrack->addDelegate(std::make_shared<FrameWriterInterfaceHelper>([&audio_decoder](const Frame::Ptr &frame) {
+                    audio_decoder->inputFrame(frame);
+                }));
+            }
+        }
     });
-
 
     player->setOnShutdown([](const SockException &ex) {
         ErrorL << "OnShutdown:" << ex.what();
     });
     (*player)[kRtpType] = atoi(argv[2]);
     player->play(argv[1]);
-
     SDLDisplayerHelper::Instance().runLoop();
     return 0;
 }
