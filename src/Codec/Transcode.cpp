@@ -90,8 +90,14 @@ FFmpegDecoder::FFmpegDecoder(const Track::Ptr &track) {
     if (!_context) {
         throw std::runtime_error("创建解码器失败");
     }
+
     //保存AVFrame的引用
     _context->refcounted_frames = 1;
+
+    if (codec->capabilities & AV_CODEC_CAP_TRUNCATED) {
+        /* we do not send complete frames */
+        _context->flags |= AV_CODEC_FLAG_TRUNCATED;
+    }
 
     if (avcodec_open2(_context.get(), codec, NULL) < 0) {
         throw std::runtime_error("打开编码器失败");
