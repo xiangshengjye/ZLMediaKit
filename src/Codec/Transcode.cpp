@@ -15,6 +15,10 @@ AVFrame *FFmpegFrame::get() const{
     return _frame.get();
 }
 
+CodecId FFmpegFrame::getSourceCodec() const{
+    return _src_codec;
+}
+
 ///////////////////////////////////////////////////////////////////////////
 
 template<bool decoder = true, typename ...ARGS>
@@ -62,10 +66,10 @@ FFmpegDecoder::FFmpegDecoder(const Track::Ptr &track) {
     AVCodec *codec;
     switch (track->getCodecId()) {
         case CodecH264:
-            codec = getCodec(AV_CODEC_ID_H264, "libx264", "h264_videotoolbox");
+            codec = getCodec(AV_CODEC_ID_H264, "h264_videotoolbox");
             break;
         case CodecH265:
-            codec = getCodec(AV_CODEC_ID_HEVC, "libx265", "hevc_videotoolbox");
+            codec = getCodec(AV_CODEC_ID_HEVC, "hevc_videotoolbox");
             break;
         case CodecAAC:
             codec = getCodec(AV_CODEC_ID_AAC);
@@ -100,8 +104,9 @@ FFmpegDecoder::FFmpegDecoder(const Track::Ptr &track) {
         _context->flags |= AV_CODEC_FLAG_TRUNCATED;
     }
 
-    if (avcodec_open2(_context.get(), codec, NULL) < 0) {
-        throw std::runtime_error("打开编码器失败");
+    int ret = avcodec_open2(_context.get(), codec, NULL);
+    if (ret < 0) {
+        throw std::runtime_error(string("打开解码器失败:") + av_err2str(ret));
     }
 }
 
@@ -115,13 +120,14 @@ void FFmpegDecoder::inputFrame(const Frame::Ptr &frame) {
     pkt.pts = frame->pts();
 
     FFmpegFrame::Ptr out_frame = _frame_pool.obtain();
-    int out_flag;
+    int out_flag = 0;
     auto len = avcodec_decode_video2(_context.get(), out_frame->get(), &out_flag, &pkt);
     if(len < 0){
-        WarnL << "avcodec_decode_video2 failed:" << len;
+        WarnL << "avcodec_decode_video2 failed:" << av_err2str(len);
         return;
     }
     if (out_flag) {
+        out_frame->_src_codec = frame->getCodecId();
         onDecode(out_frame);
     }
 }
@@ -131,9 +137,85 @@ void FFmpegDecoder::setOnDecode(FFmpegDecoder::onDec cb) {
 }
 
 void FFmpegDecoder::onDecode(const FFmpegFrame::Ptr &frame){
+    //todo test encoder
+    static FFmpegEncoder encoder(CodecH265);
+    encoder.inputFrame(frame);
     if (_cb) {
         _cb(frame);
     }
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+FFmpegEncoder::FFmpegEncoder(CodecId type){
+    _codec = type;
+    avcodec_register_all();
+    AVCodec *codec;
+    switch (type) {
+        case CodecH264:
+            codec = getCodec<false>(AV_CODEC_ID_H264, "libx264", "h264_videotoolbox");
+            break;
+        case CodecH265:
+            codec = getCodec<false>(AV_CODEC_ID_HEVC, "libx265", "hevc_videotoolbox");
+            break;
+        case CodecAAC:
+            codec = getCodec<false>(AV_CODEC_ID_AAC);
+            break;
+        case CodecG711A:
+            codec = getCodec<false>(AV_CODEC_ID_PCM_ALAW);
+            break;
+        case CodecG711U:
+            codec = getCodec<false>(AV_CODEC_ID_PCM_MULAW);
+            break;
+        default: break;
+    }
+
+    if (!codec) {
+        throw std::runtime_error("未找到解码器");
+    }
+
+    _context.reset(avcodec_alloc_context3(codec), [](AVCodecContext *ctx) {
+        avcodec_close(ctx);
+        avcodec_free_context(&ctx);
+    });
+
+    if (!_context) {
+        throw std::runtime_error("创建编码器失败");
+    }
+
+    //保存AVFrame的引用
+    _context->refcounted_frames = 1;
+
+    int ret = avcodec_open2(_context.get(), codec, NULL);
+    if (ret < 0) {
+        throw std::runtime_error(string("打开编码器失败:") + av_err2str(ret));
+    }
+}
+
+FFmpegEncoder::~FFmpegEncoder(){
+
+}
+
+void FFmpegEncoder::inputFrame(const FFmpegFrame::Ptr &frame){
+    if (getTrackType(frame->getSourceCodec()) != getTrackType(_codec)) {
+        throw std::invalid_argument("音视频类型不一致, 无法编码");
+    }
+    AVPacket pkt;
+    av_init_packet(&pkt);
+
+    int got_packet = 0;
+    auto ret = avcodec_encode_video2(_context.get(), &pkt, frame->get(), &got_packet);
+    if (ret < 0) {
+        WarnL << "avcodec_encode_video2 failed:" << av_err2str(ret);
+        return;
+    }
+    if (got_packet) {
+       InfoL << pkt.data << " " << pkt.buf;
+    }
+}
+
+void FFmpegEncoder::onEncode(const Frame::Ptr &frame){
+
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////

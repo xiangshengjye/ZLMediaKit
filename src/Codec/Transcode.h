@@ -20,12 +20,16 @@ extern "C" {
 class FFmpegFrame {
 public:
     using Ptr = std::shared_ptr<FFmpegFrame>;
+    friend class FFmpegDecoder;
+
     FFmpegFrame();
     ~FFmpegFrame() = default;
 
     AVFrame *get() const;
+    CodecId getSourceCodec() const;
 
 private:
+    CodecId _src_codec;
     std::shared_ptr<AVFrame> _frame;
 };
 
@@ -46,6 +50,21 @@ private:
 private:
     onDec _cb;
     ResourcePool<FFmpegFrame> _frame_pool;
+    std::shared_ptr<AVCodecContext> _context;
+};
+
+class FFmpegEncoder : ResourcePoolHelper<FrameImp> {
+public:
+    FFmpegEncoder(CodecId codec);
+    ~FFmpegEncoder();
+
+    void inputFrame(const FFmpegFrame::Ptr &frame);
+
+private:
+    void onEncode(const Frame::Ptr &frame);
+
+private:
+    CodecId _codec;
     std::shared_ptr<AVCodecContext> _context;
 };
 
