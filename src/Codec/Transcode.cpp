@@ -3,6 +3,9 @@
 //
 
 #include "Transcode.h"
+#include "Extension/H264.h"
+#include "Extension/H265.h"
+#include "Extension/AAC.h"
 
 FFmpegFrame::FFmpegFrame() {
     _frame.reset(av_frame_alloc(), [](AVFrame *ptr) {
@@ -183,12 +186,98 @@ FFmpegFrame::Ptr FFmpegSws::inputFrame(const FFmpegFrame::Ptr &frame){
         out->get()->format = _target_format;
         out->get()->width = _target_width;
         out->get()->height = _target_height;
+        out->get()->pkt_dts = frame->get()->pkt_dts;
+        out->get()->pts = frame->get()->pts;
+        out->_src_codec = frame->getSourceCodec();
         return out;
     }
 
     WarnL << "sws_getContext failed";
     return frame;
 }
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+class FFmpegEncodedFrame : public Frame {
+public:
+    using Ptr = std::shared_ptr<FFmpegEncodedFrame>;
+
+    FFmpegEncodedFrame(AVPacket *pkt, CodecId  codec){
+        _pkt = pkt;
+        _codec = codec;
+    }
+
+    ~FFmpegEncodedFrame() override{
+        av_packet_unref(_pkt);
+        av_packet_free(&_pkt);
+    }
+
+    uint32_t dts() const override{
+        return _pkt->dts;
+    }
+
+    uint32_t pts() const override{
+        return _pkt->pts;
+    }
+
+    uint32_t prefixSize() const override{
+        switch (_codec) {
+            case mediakit::CodecH264:
+            case mediakit::CodecH265: return mediakit::prefixSize(data(), size());
+            case mediakit::CodecAAC: return ADTS_HEADER_LEN;
+            default: return 0;
+        }
+    }
+
+    bool keyFrame() const override {
+        switch (_codec) {
+            case mediakit::CodecH264: {
+                return H264_TYPE(data()[prefixSize()]) == H264Frame::NAL_IDR;
+            }
+            case mediakit::CodecH265: {
+                return H265Frame::isKeyFrame(H265_TYPE(((uint8_t *) data())[prefixSize()]));
+            }
+            default: return false;
+        }
+    }
+
+    bool configFrame() const override{
+        switch (_codec) {
+            case mediakit::CodecH264: {
+                switch (H264_TYPE(data()[prefixSize()])) {
+                    case H264Frame::NAL_SPS:
+                    case H264Frame::NAL_PPS: return true;
+                    default: return false;
+                }
+            }
+            case mediakit::CodecH265: {
+                switch (H265_TYPE(((uint8_t *) data())[prefixSize()])) {
+                    case H265Frame::NAL_VPS:
+                    case H265Frame::NAL_SPS:
+                    case H265Frame::NAL_PPS: return true;
+                    default: return false;
+                }
+            }
+            default: return false;
+        }
+    }
+
+    CodecId getCodecId() const override{
+        return _codec;
+    }
+
+    char *data() const override{
+        return (char *)_pkt->data;
+    }
+
+    uint32_t size() const override{
+        return _pkt->size;
+    }
+
+private:
+    AVPacket *_pkt;
+    CodecId  _codec;
+};
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -277,21 +366,28 @@ void FFmpegEncoder::inputFrame(const FFmpegFrame::Ptr &frame_in){
     }
 
     auto frame = _sws->inputFrame(frame_in);
-    AVPacket pkt;
-    av_init_packet(&pkt);
+    AVPacket *pkt = av_packet_alloc();
+    pkt->data = NULL;    // packet data will be allocated by the encoder
+    pkt->size = 0;
 
     int got_packet = 0;
-    auto ret = avcodec_encode_video2(_context.get(), &pkt, frame->get(), &got_packet);
+    auto ret = avcodec_encode_video2(_context.get(), pkt, frame->get(), &got_packet);
     if (ret < 0) {
         WarnL << "avcodec_encode_video2 failed:" << av_err2str(ret);
+        av_packet_unref(pkt);
+        av_packet_free(&pkt);
         return;
     }
     if (got_packet) {
-        InfoL << pkt.data << " " << pkt.buf;
+        onEncode(std::make_shared<FFmpegEncodedFrame>(pkt, _codec));
+    } else {
+        av_packet_unref(pkt);
+        av_packet_free(&pkt);
     }
 }
 
 void FFmpegEncoder::onEncode(const Frame::Ptr &frame){
+    InfoL << frame->data() << " " << frame->size() << " " << frame->dts() << " " << frame->pts();
 
 }
 

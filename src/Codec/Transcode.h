@@ -21,6 +21,7 @@ class FFmpegFrame {
 public:
     using Ptr = std::shared_ptr<FFmpegFrame>;
     friend class FFmpegDecoder;
+    friend class FFmpegSws;
 
     FFmpegFrame();
     ~FFmpegFrame() = default;
