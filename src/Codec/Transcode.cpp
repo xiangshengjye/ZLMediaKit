@@ -138,7 +138,7 @@ void FFmpegDecoder::setOnDecode(FFmpegDecoder::onDec cb) {
 
 void FFmpegDecoder::onDecode(const FFmpegFrame::Ptr &frame){
     //todo test encoder
-    static FFmpegEncoder encoder(CodecH265);
+    static FFmpegEncoder encoder(CodecH264);
     encoder.inputFrame(frame);
     if (_cb) {
         _cb(frame);
@@ -185,7 +185,14 @@ FFmpegEncoder::FFmpegEncoder(CodecId type){
 
     //保存AVFrame的引用
     _context->refcounted_frames = 1;
-
+    _context->time_base.den = 1;
+    _context->time_base.num = 1000;
+    _context->bit_rate = 4 * 1024 * 1024;
+    _context->gop_size = 50;
+    _context->max_b_frames = 0;
+    _context->pix_fmt = AV_PIX_FMT_YUV420P;
+    _context->width = 1080;
+    _context->height = 720;
     int ret = avcodec_open2(_context.get(), codec, NULL);
     if (ret < 0) {
         throw std::runtime_error(string("打开编码器失败:") + av_err2str(ret));
