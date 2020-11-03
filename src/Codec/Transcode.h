@@ -105,7 +105,7 @@ public:
 
 private:
     MediaSinkInterface *_sink;
-    CodecId _target_codec[TrackMax] = {CodecH265, CodecAAC};
+    CodecId _target_codec[TrackMax] = {CodecH265, CodecG711A};
     FFmpegDecoder::Ptr _decoder[TrackMax];
     FFmpegEncoder::Ptr _encoder[TrackMax];
 };

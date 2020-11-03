@@ -6,6 +6,8 @@
 #include "Extension/H264.h"
 #include "Extension/H265.h"
 #include "Extension/AAC.h"
+#include "Extension/G711.h"
+#include "Extension/Opus.h"
 
 FFmpegFrame::FFmpegFrame() {
     _frame.reset(av_frame_alloc(), [](AVFrame *ptr) {
@@ -83,6 +85,9 @@ FFmpegDecoder::FFmpegDecoder(const Track::Ptr &track) {
         case CodecG711U:
             codec = getCodec(AV_CODEC_ID_PCM_MULAW);
             break;
+        case CodecOpus:
+            codec = getCodec(AV_CODEC_ID_OPUS);
+            break;
         default: break;
     }
 
@@ -126,7 +131,7 @@ void FFmpegDecoder::inputFrame(const Frame::Ptr &frame) {
     int out_flag = 0;
     auto len = avcodec_decode_video2(_context.get(), out_frame->get(), &out_flag, &pkt);
     if(len < 0){
-        WarnL << "avcodec_decode_video2 failed:" << av_err2str(len);
+        WarnL << "avcodec_decode_video2 failed:" << av_err2str(len) << ", frame codec:" << frame->getCodecName();
         return;
     }
     if (out_flag) {
@@ -297,6 +302,9 @@ FFmpegEncoder::FFmpegEncoder(CodecId type){
         case CodecG711U:
             codec = getCodec<false>(AV_CODEC_ID_PCM_MULAW);
             break;
+        case CodecOpus:
+            codec = getCodec<false>(AV_CODEC_ID_OPUS);
+            break;
         default: break;
     }
 
@@ -324,9 +332,18 @@ FFmpegEncoder::FFmpegEncoder(CodecId type){
             _context->width = 1080;
             _context->height = 720;
             _context->codec_type = AVMEDIA_TYPE_VIDEO;
+
+            auto pix_fmt = codec->pix_fmts;
+            while (pix_fmt && *pix_fmt != AV_PIX_FMT_NONE) {
+                _supported_pix_fmts.emplace(*pix_fmt);
+                ++pix_fmt;
+            }
+            assert(_supported_pix_fmts.size() > 0);
+
             break;
         }
         case TrackAudio: {
+            _context->sample_fmt = AV_SAMPLE_FMT_S16;
             _context->sample_rate = 44100;
             _context->channels = 2;
             _context->bit_rate = 128 * 1024;
@@ -340,12 +357,6 @@ FFmpegEncoder::FFmpegEncoder(CodecId type){
     if (ret < 0) {
         throw std::runtime_error(string("打开编码器失败:") + av_err2str(ret));
     }
-    auto pix_fmt = codec->pix_fmts;
-    while (pix_fmt && *pix_fmt != AV_PIX_FMT_NONE) {
-        _supported_pix_fmts.emplace(*pix_fmt);
-        ++pix_fmt;
-    }
-    assert(_supported_pix_fmts.size() > 0);
 }
 
 FFmpegEncoder::~FFmpegEncoder(){
@@ -430,6 +441,18 @@ void Transcode::resetTracks() {
     CLEAR_ARR(_encoder);
 }
 
+static Track::Ptr makeTrack(CodecId codec){
+    switch (codec) {
+        case mediakit::CodecH264: return std::make_shared<H264Track>();
+        case mediakit::CodecH265: return std::make_shared<H265Track>();
+        case mediakit::CodecAAC: return std::make_shared<AACTrack>();
+        case mediakit::CodecG711U:
+        case mediakit::CodecG711A: return std::make_shared<G711Track>(codec, 8000, 1, 16);
+        case mediakit::CodecOpus: return std::make_shared<OpusTrack>();
+        default: return nullptr;
+    }
+}
+
 void Transcode::addTrack(const Track::Ptr &track) {
     auto track_type = track->getTrackType();
     if (_target_codec[track_type] == track->getCodecId()) {
@@ -446,6 +469,7 @@ void Transcode::addTrack(const Track::Ptr &track) {
     _encoder[track_type]->setOnEncode([this](const Frame::Ptr &frame) {
         _sink->inputFrame(frame);
     });
+    _sink->addTrack(makeTrack(_target_codec[track_type]));
 }
 
 void Transcode::inputFrame(const Frame::Ptr &frame) {
