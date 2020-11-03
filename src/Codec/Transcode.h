@@ -53,6 +53,23 @@ private:
     std::shared_ptr<AVCodecContext> _context;
 };
 
+class FFmpegSws{
+public:
+    using Ptr = std::shared_ptr<FFmpegSws>;
+
+    FFmpegSws(AVPixelFormat output);
+    ~FFmpegSws();
+
+    FFmpegFrame::Ptr inputFrame(const FFmpegFrame::Ptr &frame);
+
+private:
+    int _target_width;
+    int _target_height;
+    SwsContext *_ctx = nullptr;
+    AVPixelFormat _target_format;
+    ResourcePool<FFmpegFrame> _frame_pool;
+};
+
 class FFmpegEncoder : ResourcePoolHelper<FrameImp> {
 public:
     FFmpegEncoder(CodecId codec);
@@ -64,7 +81,9 @@ private:
     void onEncode(const Frame::Ptr &frame);
 
 private:
+    set<enum AVPixelFormat> _supported_pix_fmts;
     CodecId _codec;
+    FFmpegSws::Ptr _sws;
     std::shared_ptr<AVCodecContext> _context;
 };
 
