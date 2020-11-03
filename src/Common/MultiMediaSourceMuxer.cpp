@@ -10,6 +10,8 @@
 
 #include <math.h>
 #include "MultiMediaSourceMuxer.h"
+#include "Codec/Transcode.h"
+
 namespace mediakit {
 
 ///////////////////////////////MultiMuxerPrivate//////////////////////////////////
@@ -288,6 +290,7 @@ MultiMediaSourceMuxer::MultiMediaSourceMuxer(const string &vhost, const string &
                                              bool enable_rtsp, bool enable_rtmp, bool enable_hls, bool enable_mp4) {
     _muxer.reset(new MultiMuxerPrivate(vhost, app, stream, dur_sec, enable_rtsp, enable_rtmp, enable_hls, enable_mp4));
     _muxer->setTrackListener(this);
+    _transcode = std::make_shared<Transcode>(_muxer.get());
 }
 
 void MultiMediaSourceMuxer::setMediaListener(const std::weak_ptr<MediaSourceEvent> &listener) {
@@ -360,11 +363,11 @@ bool MultiMediaSourceMuxer::stopSendRtp(MediaSource &sender){
 }
 
 void MultiMediaSourceMuxer::addTrack(const Track::Ptr &track) {
-    _muxer->addTrack(track);
+    _transcode->addTrack(track);
 }
 
 void MultiMediaSourceMuxer::addTrackCompleted() {
-    _muxer->addTrackCompleted();
+    _transcode->addTrackCompleted();
 }
 
 void MultiMediaSourceMuxer::onAllTrackReady(){
@@ -376,7 +379,7 @@ void MultiMediaSourceMuxer::onAllTrackReady(){
 }
 
 void MultiMediaSourceMuxer::resetTracks() {
-    _muxer->resetTracks();
+    _transcode->resetTracks();
 }
 
 //该类实现frame级别的时间戳覆盖
@@ -438,7 +441,7 @@ void MultiMediaSourceMuxer::inputFrame(const Frame::Ptr &frame_in) {
         //开启了时间戳覆盖
         frame = std::make_shared<FrameModifyStamp>(frame, _stamp[frame->getTrackType()]);
     }
-    _muxer->inputFrame(frame);
+    _transcode->inputFrame(frame);
 
 #if defined(ENABLE_RTPPROXY)
     auto rtp_sender = _rtp_sender;
@@ -446,7 +449,6 @@ void MultiMediaSourceMuxer::inputFrame(const Frame::Ptr &frame_in) {
         rtp_sender->inputFrame(frame);
     }
 #endif //ENABLE_RTPPROXY
-
 }
 
 bool MultiMediaSourceMuxer::isEnabled(){

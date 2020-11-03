@@ -189,6 +189,7 @@ private:
 #if defined(ENABLE_RTPPROXY)
     RtpSender::Ptr _rtp_sender;
 #endif //ENABLE_RTPPROXY
+    MediaSinkInterface::Ptr _transcode;
 };
 
 }//namespace mediakit

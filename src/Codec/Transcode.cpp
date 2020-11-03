@@ -101,7 +101,6 @@ FFmpegDecoder::FFmpegDecoder(const Track::Ptr &track) {
 
     //保存AVFrame的引用
     _context->refcounted_frames = 1;
-    _context->pix_fmt = AV_PIX_FMT_YUV420P;
 
     if (codec->capabilities & AV_CODEC_CAP_TRUNCATED) {
         /* we do not send complete frames */
@@ -141,9 +140,6 @@ void FFmpegDecoder::setOnDecode(FFmpegDecoder::onDec cb) {
 }
 
 void FFmpegDecoder::onDecode(const FFmpegFrame::Ptr &frame){
-    //todo test encoder
-    static FFmpegEncoder encoder(CodecH264);
-    encoder.inputFrame(frame);
     if (_cb) {
         _cb(frame);
     }
@@ -317,17 +313,29 @@ FFmpegEncoder::FFmpegEncoder(CodecId type){
         throw std::runtime_error("创建编码器失败");
     }
 
+    switch (getTrackType(type) ) {
+        case TrackVideo: {
+            _context->time_base.den = 25;
+            _context->time_base.num = 1;
+            _context->bit_rate = 4 * 1024 * 1024;
+            _context->gop_size = 50;
+            _context->max_b_frames = 0;
+            _context->pix_fmt = AV_PIX_FMT_YUV420P;
+            _context->width = 1080;
+            _context->height = 720;
+            _context->codec_type = AVMEDIA_TYPE_VIDEO;
+            break;
+        }
+        case TrackAudio: {
+            _context->sample_rate = 44100;
+            _context->channels = 2;
+            _context->bit_rate = 128 * 1024;
+            break;
+        }
+    }
     //保存AVFrame的引用
     _context->refcounted_frames = 1;
-    _context->time_base.den = 25;
-    _context->time_base.num = 1;
-    _context->bit_rate = 4 * 1024 * 1024;
-    _context->gop_size = 50;
-    _context->max_b_frames = 0;
-    _context->pix_fmt = AV_PIX_FMT_YUV420P;
-    _context->width = 1080;
-    _context->height = 720;
-    _context->codec_type = getTrackType(type) == TrackVideo ? AVMEDIA_TYPE_VIDEO : AVMEDIA_TYPE_AUDIO;
+
     int ret = avcodec_open2(_context.get(), codec, NULL);
     if (ret < 0) {
         throw std::runtime_error(string("打开编码器失败:") + av_err2str(ret));
@@ -344,28 +352,37 @@ FFmpegEncoder::~FFmpegEncoder(){
 
 }
 
+void FFmpegEncoder::setOnEncode(onEnc cb){
+    _cb = std::move(cb);
+}
+
 void FFmpegEncoder::inputFrame(const FFmpegFrame::Ptr &frame_in){
     if (getTrackType(frame_in->getSourceCodec()) != getTrackType(_codec)) {
         throw std::invalid_argument("音视频类型不一致, 无法编码");
     }
-    if (!_sws) {
-        if (_supported_pix_fmts.find((enum AVPixelFormat) frame_in->get()->format) != _supported_pix_fmts.end()) {
-            //优先不转换图片类型
-            _sws = std::make_shared<FFmpegSws>((enum AVPixelFormat) frame_in->get()->format);
-        } else if (_supported_pix_fmts.find(AV_PIX_FMT_YUV420P) != _supported_pix_fmts.end()) {
-            //其次选择AV_PIX_FMT_YUV420P
-            _sws = std::make_shared<FFmpegSws>(AV_PIX_FMT_YUV420P);
-        } else {
-            //没最佳选择，随便选择一种
-            _sws = std::make_shared<FFmpegSws>(*_supported_pix_fmts.begin());
+
+    FFmpegFrame::Ptr frame = frame_in;
+    if (getTrackType(_codec) == TrackVideo) {
+        //视频需要转格式再编码
+        if (!_sws) {
+            if (_supported_pix_fmts.find((enum AVPixelFormat) frame_in->get()->format) != _supported_pix_fmts.end()) {
+                //优先不转换图片类型
+                _sws = std::make_shared<FFmpegSws>((enum AVPixelFormat) frame_in->get()->format);
+            } else if (_supported_pix_fmts.find(AV_PIX_FMT_YUV420P) != _supported_pix_fmts.end()) {
+                //其次选择AV_PIX_FMT_YUV420P
+                _sws = std::make_shared<FFmpegSws>(AV_PIX_FMT_YUV420P);
+            } else {
+                //没最佳选择，随便选择一种
+                _sws = std::make_shared<FFmpegSws>(*_supported_pix_fmts.begin());
+            }
         }
-    }
-    if (!_sws) {
-        InfoL << "创建swscale对象失败";
-        return;
+        if (!_sws) {
+            InfoL << "创建swscale对象失败";
+            return;
+        }
+        frame = _sws->inputFrame(frame_in);
     }
 
-    auto frame = _sws->inputFrame(frame_in);
     AVPacket *pkt = av_packet_alloc();
     pkt->data = NULL;    // packet data will be allocated by the encoder
     pkt->size = 0;
@@ -387,8 +404,10 @@ void FFmpegEncoder::inputFrame(const FFmpegFrame::Ptr &frame_in){
 }
 
 void FFmpegEncoder::onEncode(const Frame::Ptr &frame){
-    InfoL << frame->data() << " " << frame->size() << " " << frame->dts() << " " << frame->pts();
-
+//    InfoL << frame->data() << " " << frame->size() << " " << frame->dts() << " " << frame->pts();
+    if (_cb) {
+        _cb(frame);
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -401,10 +420,40 @@ Transcode::~Transcode() {
 
 }
 
-void Transcode::addTrack(const Track::Ptr &track) {
+void Transcode::addTrackCompleted() {
+    _sink->addTrackCompleted();
+}
 
+void Transcode::resetTracks() {
+    _sink->resetTracks();
+    CLEAR_ARR(_decoder);
+    CLEAR_ARR(_encoder);
+}
+
+void Transcode::addTrack(const Track::Ptr &track) {
+    auto track_type = track->getTrackType();
+    if (_target_codec[track_type] == track->getCodecId()) {
+        //目标编码格式一致
+        _sink->addTrack(track);
+        return;
+    }
+    _decoder[track_type] = std::make_shared<FFmpegDecoder>(track);
+    _encoder[track_type] = std::make_shared<FFmpegEncoder>(_target_codec[track_type]);
+
+    _decoder[track_type]->setOnDecode([this, track_type](const FFmpegFrame::Ptr &frame) {
+        _encoder[track_type]->inputFrame(frame);
+    });
+    _encoder[track_type]->setOnEncode([this](const Frame::Ptr &frame) {
+        _sink->inputFrame(frame);
+    });
 }
 
 void Transcode::inputFrame(const Frame::Ptr &frame) {
-
+    auto track_type = frame->getTrackType();
+    if (_target_codec[track_type] == frame->getCodecId()) {
+        //目标编码格式一致
+        _sink->inputFrame(frame);
+        return;
+    }
+    _decoder[track_type]->inputFrame(frame);
 }

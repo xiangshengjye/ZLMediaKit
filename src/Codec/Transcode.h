@@ -73,19 +73,24 @@ private:
 
 class FFmpegEncoder : ResourcePoolHelper<FrameImp> {
 public:
+    using Ptr = std::shared_ptr<FFmpegEncoder>;
+    using onEnc = function<void(const Frame::Ptr &)>;
+
     FFmpegEncoder(CodecId codec);
     ~FFmpegEncoder();
 
+    void setOnEncode(onEnc cb);
     void inputFrame(const FFmpegFrame::Ptr &frame);
 
 private:
     void onEncode(const Frame::Ptr &frame);
 
 private:
-    set<enum AVPixelFormat> _supported_pix_fmts;
+    onEnc _cb;
     CodecId _codec;
     FFmpegSws::Ptr _sws;
     std::shared_ptr<AVCodecContext> _context;
+    set<enum AVPixelFormat> _supported_pix_fmts;
 };
 
 class Transcode : public MediaSinkInterface {
@@ -95,9 +100,14 @@ public:
 
     void addTrack(const Track::Ptr & track) override;
     void inputFrame(const Frame::Ptr &frame) override;
+    void addTrackCompleted() override;
+    void resetTracks() override;
 
 private:
     MediaSinkInterface *_sink;
+    CodecId _target_codec[TrackMax] = {CodecH265, CodecAAC};
+    FFmpegDecoder::Ptr _decoder[TrackMax];
+    FFmpegEncoder::Ptr _encoder[TrackMax];
 };
 
 #endif //ZLMEDIAKIT_TRANSCODE_H
