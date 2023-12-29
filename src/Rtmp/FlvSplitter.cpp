@@ -1,9 +1,9 @@
 ﻿/*
- * Copyright (c) 2016 The ZLMediaKit project authors. All Rights Reserved.
+ * Copyright (c) 2016-present The ZLMediaKit project authors. All Rights Reserved.
  *
  * This file is part of ZLMediaKit(https://github.com/ZLMediaKit/ZLMediaKit).
  *
- * Use of this source code is governed by MIT license that can be found in the
+ * Use of this source code is governed by MIT-like license that can be found in the
  * LICENSE file in the root of the source tree. All contributing project authors
  * may be found in the AUTHORS file in the root of the source tree.
  */
@@ -91,21 +91,26 @@ void FlvSplitter::onRecvContent(const char *data, size_t len) {
         case MSG_DATA3: {
             BufferLikeString buffer(string(data, len));
             AMFDecoder dec(buffer, _type == MSG_DATA3 ? 3 : 0);
-            std::string type = dec.load<std::string>();
+            auto first = dec.load<AMFValue>();
             bool flag = true;
-            if (type == "@setDataFrame") {
-                std::string type = dec.load<std::string>();
-                if (type == "onMetaData") {
+            if (first.type() == AMFType::AMF_STRING) {
+                auto type = first.as_string();
+                if (type == "@setDataFrame") {
+                    type = dec.load<std::string>();
+                    if (type == "onMetaData") {
+                        flag = onRecvMetadata(dec.load<AMFValue>());
+                    } else {
+                        WarnL << "unknown type:" << type;
+                    }
+                } else if (type == "onMetaData") {
                     flag = onRecvMetadata(dec.load<AMFValue>());
                 } else {
-                    WarnL << "unknown type:" << type;
+                    WarnL << "unknown notify:" << type;
                 }
-            } else if (type == "onMetaData") {
-                flag = onRecvMetadata(dec.load<AMFValue>());
             } else {
-                WarnL << "unknown notify:" << type;
+                WarnL << "Parse flv script data failed, invalid amf value: " << first.to_string();
             }
-            if(!flag){
+            if (!flag) {
                 throw std::invalid_argument("check rtmp metadata failed");
             }
             return;

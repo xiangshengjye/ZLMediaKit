@@ -1,9 +1,9 @@
 ﻿/*
- * Copyright (c) 2016 The ZLMediaKit project authors. All Rights Reserved.
+ * Copyright (c) 2016-present The ZLMediaKit project authors. All Rights Reserved.
  *
- * This file is part of ZLMediaKit(https://github.com/xia-chu/ZLMediaKit).
+ * This file is part of ZLMediaKit(https://github.com/ZLMediaKit/ZLMediaKit).
  *
- * Use of this source code is governed by MIT license that can be found in the
+ * Use of this source code is governed by MIT-like license that can be found in the
  * LICENSE file in the root of the source tree. All contributing project authors
  * may be found in the AUTHORS file in the root of the source tree.
  */
@@ -20,6 +20,7 @@
 
 namespace FFmpeg {
     extern const std::string kSnap;
+    extern const std::string kBin;
 }
 
 class FFmpegSnap {
@@ -79,8 +80,6 @@ private:
     mediakit::MediaOriginType getOriginType(mediakit::MediaSource &sender) const override;
     //获取媒体源url或者文件路径
     std::string getOriginUrl(mediakit::MediaSource &sender) const override;
-    // 获取媒体源客户端相关信息
-    std::shared_ptr<toolkit::SockInfo> getOriginSock(mediakit::MediaSource &sender) const override;
 
 private:
     bool _enable_hls = false;

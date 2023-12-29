@@ -1,9 +1,9 @@
 ﻿/*
- * Copyright (c) 2016 The ZLMediaKit project authors. All Rights Reserved.
+ * Copyright (c) 2016-present The ZLMediaKit project authors. All Rights Reserved.
  *
- * This file is part of ZLMediaKit(https://github.com/xia-chu/ZLMediaKit).
+ * This file is part of ZLMediaKit(https://github.com/ZLMediaKit/ZLMediaKit).
  *
- * Use of this source code is governed by MIT license that can be found in the
+ * Use of this source code is governed by MIT-like license that can be found in the
  * LICENSE file in the root of the source tree. All contributing project authors
  * may be found in the AUTHORS file in the root of the source tree.
  */
@@ -27,7 +27,6 @@ public:
     using Ptr = std::shared_ptr<RtmpSession>;
 
     RtmpSession(const toolkit::Socket::Ptr &sock);
-    ~RtmpSession() override;
 
     void onRecv(const toolkit::Buffer::Ptr &buf) override;
     void onError(const toolkit::SockException &err) override;
@@ -97,6 +96,7 @@ private:
     MediaInfo _media_info;
     std::weak_ptr<RtmpMediaSource> _play_src;
     AMFValue _push_metadata;
+    std::map<uint8_t, RtmpPacket::Ptr> _push_config_packets;
     RtmpMediaSourceImp::Ptr _push_src;
     std::shared_ptr<void> _push_src_ownership;
     RtmpMediaSource::RingType::RingReader::Ptr _ring_reader;

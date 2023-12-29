@@ -1,9 +1,9 @@
 ﻿/*
- * Copyright (c) 2016 The ZLMediaKit project authors. All Rights Reserved.
+ * Copyright (c) 2016-present The ZLMediaKit project authors. All Rights Reserved.
  *
- * This file is part of ZLMediaKit(https://github.com/xia-chu/ZLMediaKit).
+ * This file is part of ZLMediaKit(https://github.com/ZLMediaKit/ZLMediaKit).
  *
- * Use of this source code is governed by MIT license that can be found in the
+ * Use of this source code is governed by MIT-like license that can be found in the
  * LICENSE file in the root of the source tree. All contributing project authors
  * may be found in the AUTHORS file in the root of the source tree.
  */
@@ -46,7 +46,11 @@ void FlvMuxer::start(const EventPoller::Ptr &poller, const RtmpMediaSource::Ptr 
     std::weak_ptr<FlvMuxer> weak_self = getSharedPtr();
     media->pause(false);
     _ring_reader = media->getRing()->attach(poller);
-    _ring_reader->setGetInfoCB([weak_self]() { return dynamic_pointer_cast<HttpSession>(weak_self.lock()); });
+    _ring_reader->setGetInfoCB([weak_self]() {
+        Any ret;
+        ret.set(dynamic_pointer_cast<SockInfo>(weak_self.lock()));
+        return ret;
+    });
     _ring_reader->setDetachCB([weak_self]() {
         auto strong_self = weak_self.lock();
         if (!strong_self) {
@@ -107,14 +111,12 @@ void FlvMuxer::onWriteFlvHeader(const RtmpMediaSource::Ptr &src) {
     //flv header
     onWrite(buffer, false);
 
-    auto &metadata = src->getMetaData();
-    if (metadata) {
-        //在有metadata的情况下才发送metadata
-        //其实metadata没什么用，有些推流器不产生metadata
+    // metadata
+    src->getMetaData([&](const AMFValue &metadata) {
         AMFEncoder invoke;
         invoke << "onMetaData" << metadata;
         onWriteFlvTag(MSG_DATA, std::make_shared<BufferString>(invoke.data()), 0, false);
-    }
+    });
 
     //config frame
     src->getConfigFrame([&](const RtmpPacket::Ptr &pkt) {
@@ -172,7 +174,7 @@ void FlvRecorder::startRecord(const EventPoller::Ptr &poller, const RtmpMediaSou
         }
     });
     //新建文件
-    _file.reset(File::create_file(file_path.data(), "wb"), [fileBuf](FILE *fp) {
+    _file.reset(File::create_file(file_path, "wb"), [fileBuf](FILE *fp) {
         if (fp) {
             fflush(fp);
             fclose(fp);

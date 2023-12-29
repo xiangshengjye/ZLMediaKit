@@ -1,9 +1,9 @@
 ﻿/*
- * Copyright (c) 2016 The ZLMediaKit project authors. All Rights Reserved.
+ * Copyright (c) 2016-present The ZLMediaKit project authors. All Rights Reserved.
  *
- * This file is part of ZLMediaKit(https://github.com/xia-chu/ZLMediaKit).
+ * This file is part of ZLMediaKit(https://github.com/ZLMediaKit/ZLMediaKit).
  *
- * Use of this source code is governed by MIT license that can be found in the
+ * Use of this source code is governed by MIT-like license that can be found in the
  * LICENSE file in the root of the source tree. All contributing project authors
  * may be found in the AUTHORS file in the root of the source tree.
  */
@@ -33,7 +33,7 @@ RtpProcess::RtpProcess(const string &stream_id) {
 
     GET_CONFIG(string, dump_dir, RtpProxy::kDumpDir);
     {
-        FILE *fp = !dump_dir.empty() ? File::create_file(File::absolutePath(_media_info.stream + ".rtp", dump_dir).data(), "wb") : nullptr;
+        FILE *fp = !dump_dir.empty() ? File::create_file(File::absolutePath(_media_info.stream + ".rtp", dump_dir), "wb") : nullptr;
         if (fp) {
             _save_file_rtp.reset(fp, [](FILE *fp) {
                 fclose(fp);
@@ -42,7 +42,7 @@ RtpProcess::RtpProcess(const string &stream_id) {
     }
 
     {
-        FILE *fp = !dump_dir.empty() ? File::create_file(File::absolutePath(_media_info.stream + ".video", dump_dir).data(), "wb") : nullptr;
+        FILE *fp = !dump_dir.empty() ? File::create_file(File::absolutePath(_media_info.stream + ".video", dump_dir), "wb") : nullptr;
         if (fp) {
             _save_file_video.reset(fp, [](FILE *fp) {
                 fclose(fp);
@@ -67,7 +67,7 @@ RtpProcess::~RtpProcess() {
     GET_CONFIG(uint32_t, iFlowThreshold, General::kFlowThreshold);
     if (_total_bytes >= iFlowThreshold * 1024) {
         try {
-            NoticeCenter::Instance().emitEvent(Broadcast::kBroadcastFlowReport, _media_info, _total_bytes, duration, false, static_cast<SockInfo &>(*this));
+            NOTICE_EMIT(BroadcastFlowReportArgs, Broadcast::kBroadcastFlowReport, _media_info, _total_bytes, duration, false, *this);
         } catch (std::exception &ex) {
             WarnL << "Exception occurred: " << ex.what();
         }
@@ -78,6 +78,9 @@ bool RtpProcess::inputRtp(bool is_udp, const Socket::Ptr &sock, const char *data
     if (!isRtp(data, len)) {
         WarnP(this) << "Not rtp packet";
         return false;
+    }
+    if (!_auth_err.empty()) {
+        throw toolkit::SockException(toolkit::Err_other, _auth_err);
     }
     if (_sock != sock) {
         // 第一次运行本函数
@@ -210,31 +213,27 @@ void RtpProcess::setOnDetach(function<void()> cb) {
 }
 
 string RtpProcess::get_peer_ip() {
-    if (!_addr) {
+    try {
+        return _addr ? SockUtil::inet_ntoa((sockaddr *)_addr.get()) : "::";
+    } catch (std::exception &ex) {
         return "::";
     }
-    return SockUtil::inet_ntoa((sockaddr *)_addr.get());
 }
 
 uint16_t RtpProcess::get_peer_port() {
-    if (!_addr) {
+    try {
+        return _addr ? SockUtil::inet_port((sockaddr *)_addr.get()) : 0;
+    } catch (std::exception &ex) {
         return 0;
     }
-    return SockUtil::inet_port((sockaddr *)_addr.get());
 }
 
 string RtpProcess::get_local_ip() {
-    if (_sock) {
-        return _sock->get_local_ip();
-    }
-    return "::";
+    return _sock ? _sock->get_local_ip() : "::";
 }
 
 uint16_t RtpProcess::get_local_port() {
-    if (_sock) {
-        return _sock->get_local_port();
-    }
-    return 0;
+    return _sock ? _sock->get_local_port() : 0;
 }
 
 string RtpProcess::getIdentifier() const {
@@ -255,8 +254,7 @@ void RtpProcess::emitOnPublish() {
                 return;
             }
             if (err.empty()) {
-                strong_self->_muxer = std::make_shared<MultiMediaSourceMuxer>(strong_self->_media_info, 0.0f,
-                                                                              option);
+                strong_self->_muxer = std::make_shared<MultiMediaSourceMuxer>(strong_self->_media_info, 0.0f, option);
                 if (strong_self->_only_audio) {
                     strong_self->_muxer->setOnlyAudio();
                 }
@@ -264,15 +262,16 @@ void RtpProcess::emitOnPublish() {
                 strong_self->doCachedFunc();
                 InfoP(strong_self) << "允许RTP推流";
             } else {
+                strong_self->_auth_err = err;
                 WarnP(strong_self) << "禁止RTP推流:" << err;
             }
         });
     };
 
     //触发推流鉴权事件
-    auto flag = NoticeCenter::Instance().emitEvent(Broadcast::kBroadcastMediaPublish, MediaOriginType::rtp_push, _media_info, invoker, static_cast<SockInfo &>(*this));
+    auto flag = NOTICE_EMIT(BroadcastMediaPublishArgs, Broadcast::kBroadcastMediaPublish, MediaOriginType::rtp_push, _media_info, invoker, *this);
     if (!flag) {
-        //该事件无人监听,默认不鉴权
+        // 该事件无人监听,默认不鉴权
         invoker("", ProtocolOption());
     }
 }

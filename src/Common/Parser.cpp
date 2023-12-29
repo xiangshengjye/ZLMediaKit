@@ -1,9 +1,9 @@
 ﻿/*
- * Copyright (c) 2016 The ZLMediaKit project authors. All Rights Reserved.
+ * Copyright (c) 2016-present The ZLMediaKit project authors. All Rights Reserved.
  *
- * This file is part of ZLMediaKit(https://github.com/xia-chu/ZLMediaKit).
+ * This file is part of ZLMediaKit(https://github.com/ZLMediaKit/ZLMediaKit).
  *
- * Use of this source code is governed by MIT license that can be found in the
+ * Use of this source code is governed by MIT-like license that can be found in the
  * LICENSE file in the root of the source tree. All contributing project authors
  * may be found in the AUTHORS file in the root of the source tree.
  */
@@ -11,7 +11,7 @@
 #include <cinttypes>
 #include "Parser.h"
 #include "strCoding.h"
-#include "macros.h"
+#include "Util/base64.h"
 #include "Network/sockutil.h"
 #include "Common/macros.h"
 
@@ -48,12 +48,17 @@ void Parser::parse(const char *buf, size_t size) {
     clear();
     auto ptr = buf;
     while (true) {
-        auto next_line = strstr(ptr, "\r\n");
-        CHECK(next_line);
+        auto next_line = strchr(ptr, '\n');
+        auto offset = 1;
+        CHECK(next_line && next_line > ptr);
+        if (*(next_line - 1) == '\r') {
+            next_line -= 1;
+            offset = 2;
+        }
         if (ptr == buf) {
             auto blank = strchr(ptr, ' ');
             CHECK(blank > ptr && blank < next_line);
-            _method = std::string(ptr, blank);
+           _method = std::string(ptr, blank - ptr);
             auto next_blank = strchr(blank + 1, ' ');
             CHECK(next_blank && next_blank < next_line);
             _url.assign(blank + 1, next_blank);
@@ -67,7 +72,7 @@ void Parser::parse(const char *buf, size_t size) {
         } else {
             auto pos = strchr(ptr, ':');
             CHECK(pos > ptr && pos < next_line);
-            std::string key { ptr, pos };
+            std::string key { ptr, static_cast<std::size_t>(pos - ptr) };
             std::string value;
             if (pos[1] == ' ') {
                 value.assign(pos + 2, next_line);
@@ -76,7 +81,7 @@ void Parser::parse(const char *buf, size_t size) {
             }
             _headers.emplace_force(trim(std::move(key)), trim(std::move(value)));
         }
-        ptr = next_line + 2;
+        ptr = next_line + offset;
         if (strncmp(ptr, "\r\n", 2) == 0) { // 协议解析完毕
             _content.assign(ptr + 2, buf + size);
             break;
@@ -288,7 +293,6 @@ void RtspUrl::setup(bool is_ssl, const string &url, const string &user, const st
     uint16_t port = is_ssl ? 322 : 554;
     splitUrl(ip, ip, port);
 
-    
     _url = std::move(url);
     _user = strCoding::UrlDecode(std::move(user));
     _passwd = strCoding::UrlDecode(std::move(passwd));
@@ -319,6 +323,24 @@ void splitUrl(const std::string &url, std::string &host, uint16_t &port) {
     CHECK(sscanf(url.data() + pos + 1, "%" SCNu16, &port) == 1, "parse port from url failed:", url);
     host = url.substr(0, pos);
     checkHost(host);
+}
+
+void parseProxyUrl(const std::string &proxy_url, std::string &proxy_host, uint16_t &proxy_port, std::string &proxy_auth) {
+    // 判断是否包含http://, 如果是则去掉
+    std::string host;
+    auto pos = proxy_url.find("://");
+    if (pos != string::npos) {
+        host = proxy_url.substr(pos + 3);
+    } else {
+        host = proxy_url;
+    }
+    // 判断是否包含用户名和密码
+    pos = host.rfind('@');
+    if (pos != string::npos) {
+        proxy_auth = encodeBase64(host.substr(0, pos));
+        host = host.substr(pos + 1, host.size());
+    }
+    splitUrl(host, proxy_host, proxy_port);
 }
 
 #if 0

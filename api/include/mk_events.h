@@ -1,9 +1,9 @@
 ﻿/*
- * Copyright (c) 2016 The ZLMediaKit project authors. All Rights Reserved.
+ * Copyright (c) 2016-present The ZLMediaKit project authors. All Rights Reserved.
  *
- * This file is part of ZLMediaKit(https://github.com/xia-chu/ZLMediaKit).
+ * This file is part of ZLMediaKit(https://github.com/ZLMediaKit/ZLMediaKit).
  *
- * Use of this source code is governed by MIT license that can be found in the
+ * Use of this source code is governed by MIT-like license that can be found in the
  * LICENSE file in the root of the source tree. All contributing project authors
  * may be found in the AUTHORS file in the root of the source tree.
  */
@@ -165,6 +165,17 @@ typedef struct {
      * @param message 日志内容
      */
     void (API_CALL *on_mk_log)(int level, const char *file, int line, const char *function, const char *message);
+
+    /**
+     * 发送rtp流失败回调，适用于mk_media_source_start_send_rtp/mk_media_start_send_rtp接口触发的rtp发送
+     * @param vhost 虚拟主机
+     * @param app 应用名
+     * @param stream 流id
+     * @param ssrc ssrc的10进制打印，通过atoi转换为整型
+     * @param err 错误代码
+     * @param msg 错误提示
+     */
+    void(API_CALL *on_mk_media_send_rtp_stop)(const char *vhost, const char *app, const char *stream, const char *ssrc, int err, const char *msg);
 
 } mk_events;
 

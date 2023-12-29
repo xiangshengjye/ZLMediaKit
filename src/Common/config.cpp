@@ -1,9 +1,9 @@
 ﻿/*
- * Copyright (c) 2016 The ZLMediaKit project authors. All Rights Reserved.
+ * Copyright (c) 2016-present The ZLMediaKit project authors. All Rights Reserved.
  *
- * This file is part of ZLMediaKit(https://github.com/xia-chu/ZLMediaKit).
+ * This file is part of ZLMediaKit(https://github.com/ZLMediaKit/ZLMediaKit).
  *
- * Use of this source code is governed by MIT license that can be found in the
+ * Use of this source code is governed by MIT-like license that can be found in the
  * LICENSE file in the root of the source tree. All contributing project authors
  * may be found in the AUTHORS file in the root of the source tree.
  */
@@ -31,7 +31,7 @@ bool loadIniConfig(const char *ini_path) {
     }
     try {
         mINI::Instance().parseFile(ini);
-        NoticeCenter::Instance().emitEvent(Broadcast::kBroadcastReloadConfig);
+        NOTICE_EMIT(BroadcastReloadConfigArgs, Broadcast::kBroadcastReloadConfig);
         return true;
     } catch (std::exception &) {
         InfoL << "dump ini file to:" << ini;
@@ -57,7 +57,7 @@ const string kBroadcastNotFoundStream = "kBroadcastNotFoundStream";
 const string kBroadcastStreamNoneReader = "kBroadcastStreamNoneReader";
 const string kBroadcastHttpBeforeAccess = "kBroadcastHttpBeforeAccess";
 const string kBroadcastSendRtpStopped = "kBroadcastSendRtpStopped";
-const string KBroadcastRtpServerTimeout = "KBroadcastRtpServerTimeout";
+const string kBroadcastRtpServerTimeout = "kBroadcastRtpServerTimeout";
 
 } // namespace Broadcast
 
@@ -99,7 +99,9 @@ namespace Protocol {
 const string kModifyStamp = PROTOCOL_FIELD "modify_stamp";
 const string kEnableAudio = PROTOCOL_FIELD "enable_audio";
 const string kAddMuteAudio = PROTOCOL_FIELD "add_mute_audio";
+const string kAutoClose = PROTOCOL_FIELD "auto_close";
 const string kContinuePushMS = PROTOCOL_FIELD "continue_push_ms";
+const string kPacedSenderMS = PROTOCOL_FIELD "paced_sender_ms";
 
 const string kEnableHls = PROTOCOL_FIELD "enable_hls";
 const string kEnableHlsFmp4 = PROTOCOL_FIELD "enable_hls_fmp4";
@@ -126,6 +128,8 @@ static onceToken token([]() {
     mINI::Instance()[kEnableAudio] = 1;
     mINI::Instance()[kAddMuteAudio] = 1;
     mINI::Instance()[kContinuePushMS] = 15000;
+    mINI::Instance()[kPacedSenderMS] = 0;
+    mINI::Instance()[kAutoClose] = 0;
 
     mINI::Instance()[kEnableHls] = 1;
     mINI::Instance()[kEnableHlsFmp4] = 0;
@@ -163,6 +167,7 @@ const string kDirMenu = HTTP_FIELD "dirMenu";
 const string kForbidCacheSuffix = HTTP_FIELD "forbidCacheSuffix";
 const string kForwardedIpHeader = HTTP_FIELD "forwarded_ip_header";
 const string kAllowCrossDomains = HTTP_FIELD "allow_cross_domains";
+const string kAllowIPRange = HTTP_FIELD "allow_ip_range";
 
 static onceToken token([]() {
     mINI::Instance()[kSendBufSize] = 64 * 1024;
@@ -191,6 +196,7 @@ static onceToken token([]() {
     mINI::Instance()[kForbidCacheSuffix] = "";
     mINI::Instance()[kForwardedIpHeader] = "";
     mINI::Instance()[kAllowCrossDomains] = 1;
+    mINI::Instance()[kAllowIPRange] = "::1,127.0.0.1,172.16.0.0-172.31.255.255,192.168.0.0-192.168.255.255,10.0.0.0-10.255.255.255";
 });
 
 } // namespace Http
@@ -227,14 +233,16 @@ static onceToken token([]() {
 ////////////RTMP服务器配置///////////
 namespace Rtmp {
 #define RTMP_FIELD "rtmp."
-const string kModifyStamp = RTMP_FIELD "modifyStamp";
 const string kHandshakeSecond = RTMP_FIELD "handshakeSecond";
 const string kKeepAliveSecond = RTMP_FIELD "keepAliveSecond";
+const string kDirectProxy = RTMP_FIELD "directProxy";
+const string kEnhanced = RTMP_FIELD "enhanced";
 
 static onceToken token([]() {
-    mINI::Instance()[kModifyStamp] = false;
     mINI::Instance()[kHandshakeSecond] = 15;
     mINI::Instance()[kKeepAliveSecond] = 15;
+    mINI::Instance()[kDirectProxy] = 1;
+    mINI::Instance()[kEnhanced] = 0;
 });
 } // namespace Rtmp
 
@@ -303,6 +311,7 @@ const string kSegmentRetain = HLS_FIELD "segRetain";
 const string kFileBufSize = HLS_FIELD "fileBufSize";
 const string kBroadcastRecordTs = HLS_FIELD "broadcastRecordTs";
 const string kDeleteDelaySec = HLS_FIELD "deleteDelaySec";
+const string kFastRegister = HLS_FIELD "fastRegister";
 
 static onceToken token([]() {
     mINI::Instance()[kSegmentDuration] = 2;
@@ -312,6 +321,7 @@ static onceToken token([]() {
     mINI::Instance()[kFileBufSize] = 64 * 1024;
     mINI::Instance()[kBroadcastRecordTs] = false;
     mINI::Instance()[kDeleteDelaySec] = 10;
+    mINI::Instance()[kFastRegister] = false;
 });
 } // namespace Hls
 
@@ -351,6 +361,7 @@ const string kBeatIntervalMS = "beat_interval_ms";
 const string kBenchmarkMode = "benchmark_mode";
 const string kWaitTrackReady = "wait_track_ready";
 const string kPlayTrack = "play_track";
+const string kProxyUrl = "proxy_url";
 } // namespace Client
 
 } // namespace mediakit

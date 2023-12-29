@@ -1,9 +1,9 @@
 ﻿/*
- * Copyright (c) 2016 The ZLMediaKit project authors. All Rights Reserved.
+ * Copyright (c) 2016-present The ZLMediaKit project authors. All Rights Reserved.
  *
- * This file is part of ZLMediaKit(https://github.com/xia-chu/ZLMediaKit).
+ * This file is part of ZLMediaKit(https://github.com/ZLMediaKit/ZLMediaKit).
  *
- * Use of this source code is governed by MIT license that can be found in the
+ * Use of this source code is governed by MIT-like license that can be found in the
  * LICENSE file in the root of the source tree. All contributing project authors
  * may be found in the AUTHORS file in the root of the source tree.
  */
@@ -47,21 +47,25 @@ static inline bool isRecording(Recorder::type type, const string &vhost, const s
     return src->isRecording(type);
 }
 
-static inline  bool startRecord(Recorder::type type, const string &vhost, const string &app, const string &stream_id,const string &customized_path, size_t max_second){
+static inline bool startRecord(Recorder::type type, const string &vhost, const string &app, const string &stream_id, const string &customized_path, size_t max_second) {
     auto src = MediaSource::find(vhost, app, stream_id);
     if (!src) {
         WarnL << "未找到相关的MediaSource,startRecord失败:" << vhost << "/" << app << "/" << stream_id;
         return false;
     }
-    return src->setupRecord(type, true, customized_path, max_second);
+    bool ret;
+    src->getOwnerPoller()->sync([&]() { ret = src->setupRecord(type, true, customized_path, max_second); });
+    return ret;
 }
 
-static inline bool stopRecord(Recorder::type type, const string &vhost, const string &app, const string &stream_id){
+static inline bool stopRecord(Recorder::type type, const string &vhost, const string &app, const string &stream_id) {
     auto src = MediaSource::find(vhost, app, stream_id);
-    if(!src){
+    if (!src) {
         return false;
     }
-    return src->setupRecord(type, false, "", 0);
+    bool ret;
+    src->getOwnerPoller()->sync([&]() { ret = src->setupRecord(type, false, "", 0); });
+    return ret;
 }
 
 API_EXPORT int API_CALL mk_recorder_is_recording(int type, const char *vhost, const char *app, const char *stream){

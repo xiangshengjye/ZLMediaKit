@@ -1,9 +1,9 @@
 ﻿/*
- * Copyright (c) 2016 The ZLMediaKit project authors. All Rights Reserved.
+ * Copyright (c) 2016-present The ZLMediaKit project authors. All Rights Reserved.
  *
- * This file is part of ZLMediaKit(https://github.com/xia-chu/ZLMediaKit).
+ * This file is part of ZLMediaKit(https://github.com/ZLMediaKit/ZLMediaKit).
  *
- * Use of this source code is governed by MIT license that can be found in the
+ * Use of this source code is governed by MIT-like license that can be found in the
  * LICENSE file in the root of the source tree. All contributing project authors
  * may be found in the AUTHORS file in the root of the source tree.
  */
@@ -59,11 +59,14 @@ bool WebRtcPusher::close(MediaSource &sender) {
 }
 
 int WebRtcPusher::totalReaderCount(MediaSource &sender) {
-    auto total_count = 0;
-    for (auto &src : _push_src_sim) {
-        total_count += src.second->totalReaderCount();
+    auto total_count = _push_src ? _push_src->totalReaderCount() : 0;
+    if (_simulcast) {
+        std::lock_guard<std::recursive_mutex> lock(_mtx);
+        for (auto &src : _push_src_sim) {
+            total_count += src.second->totalReaderCount();
+        }
     }
-    return total_count + _push_src->totalReaderCount();
+    return total_count;
 }
 
 MediaOriginType WebRtcPusher::getOriginType(MediaSource &sender) const {
@@ -96,6 +99,7 @@ void WebRtcPusher::onRecvRtp(MediaTrack &track, const string &rid, RtpPacket::Pt
         }
     } else {
         //视频
+        std::lock_guard<std::recursive_mutex> lock(_mtx);
         auto &src = _push_src_sim[rid];
         if (!src) {
             const auto& stream = _push_src->getMediaTuple().stream;
@@ -125,7 +129,7 @@ void WebRtcPusher::onDestory() {
     if (getSession()) {
         WarnL << "RTC推流器(" << _media_info.shortUrl() << ")结束推流,耗时(s):" << duration;
         if (bytes_usage >= iFlowThreshold * 1024) {
-            NoticeCenter::Instance().emitEvent(Broadcast::kBroadcastFlowReport, _media_info, bytes_usage, duration, false, static_cast<SockInfo &>(*getSession()));
+            NOTICE_EMIT(BroadcastFlowReportArgs, Broadcast::kBroadcastFlowReport, _media_info, bytes_usage, duration, false, *getSession());
         }
     }
 
@@ -145,7 +149,7 @@ void WebRtcPusher::onRtcConfigure(RtcConfigure &configure) const {
     configure.audio.direction = configure.video.direction = RtpDirection::recvonly;
 }
 
-float WebRtcPusher::getLossRate(MediaSource &sender,TrackType type){
+float WebRtcPusher::getLossRate(MediaSource &sender,TrackType type) {
     return WebRtcTransportImp::getLossRate(type);
 }
 
@@ -155,8 +159,13 @@ void WebRtcPusher::OnDtlsTransportClosed(const RTC::DtlsTransport *dtlsTransport
     WebRtcTransportImp::OnDtlsTransportClosed(dtlsTransport);
 }
 
-void WebRtcPusher::onRtcpBye(){
+void WebRtcPusher::onRtcpBye() {
      WebRtcTransportImp::onRtcpBye();
+}
+
+void WebRtcPusher::onShutdown(const SockException &ex) {
+     _push_src = nullptr;
+     WebRtcTransportImp::onShutdown(ex);
 }
 
 }// namespace mediakit

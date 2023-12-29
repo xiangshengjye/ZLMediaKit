@@ -1,9 +1,9 @@
 ﻿/*
- * Copyright (c) 2016 The ZLMediaKit project authors. All Rights Reserved.
+ * Copyright (c) 2016-present The ZLMediaKit project authors. All Rights Reserved.
  *
- * This file is part of ZLMediaKit(https://github.com/xia-chu/ZLMediaKit).
+ * This file is part of ZLMediaKit(https://github.com/ZLMediaKit/ZLMediaKit).
  *
- * Use of this source code is governed by MIT license that can be found in the
+ * Use of this source code is governed by MIT-like license that can be found in the
  * LICENSE file in the root of the source tree. All contributing project authors
  * may be found in the AUTHORS file in the root of the source tree.
  */
@@ -58,7 +58,7 @@ API_EXPORT int API_CALL mk_recorder_is_recording(int type, const char *vhost, co
 
 /**
  * 开始录制
- * @param type 0:hls,1:MP4
+ * @param type 0:hls-ts,1:MP4,2:hls-fmp4,3:http-fmp4,4:http-ts
  * @param vhost 虚拟主机
  * @param app 应用名
  * @param stream 流id
@@ -70,7 +70,7 @@ API_EXPORT int API_CALL mk_recorder_start(int type, const char *vhost, const cha
 
 /**
  * 停止录制
- * @param type 0:hls,1:MP4
+ * @param type 0:hls-ts,1:MP4,2:hls-fmp4,3:http-fmp4,4:http-ts
  * @param vhost 虚拟主机
  * @param app 应用名
  * @param stream 流id

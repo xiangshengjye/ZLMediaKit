@@ -1,9 +1,9 @@
 ﻿/*
- * Copyright (c) 2016 The ZLMediaKit project authors. All Rights Reserved.
+ * Copyright (c) 2016-present The ZLMediaKit project authors. All Rights Reserved.
  *
- * This file is part of ZLMediaKit(https://github.com/xia-chu/ZLMediaKit).
+ * This file is part of ZLMediaKit(https://github.com/ZLMediaKit/ZLMediaKit).
  *
- * Use of this source code is governed by MIT license that can be found in the
+ * Use of this source code is governed by MIT-like license that can be found in the
  * LICENSE file in the root of the source tree. All contributing project authors
  * may be found in the AUTHORS file in the root of the source tree.
  */
@@ -34,8 +34,12 @@ MP4Recorder::MP4Recorder(const string &path, const string &vhost, const string &
 }
 
 MP4Recorder::~MP4Recorder() {
-    flush();
-    closeFile();
+    try {
+        flush();
+        closeFile();
+    } catch (std::exception &ex) {
+        WarnL << ex.what();
+    }
 }
 
 void MP4Recorder::createFile() {
@@ -54,6 +58,7 @@ void MP4Recorder::createFile() {
 
     try {
         _muxer = std::make_shared<MP4Muxer>();
+        TraceL << "Open tmp mp4 file: " << full_path_tmp;
         _muxer->openMP4(full_path_tmp);
         for (auto &track :_tracks) {
             //添加track
@@ -71,23 +76,27 @@ void MP4Recorder::asyncClose() {
     auto full_path_tmp = _full_path_tmp;
     auto full_path = _full_path;
     auto info = _info;
+    TraceL << "Start close tmp mp4 file: " << full_path_tmp;
     WorkThreadPool::Instance().getExecutor()->async([muxer, full_path_tmp, full_path, info]() mutable {
         info.time_len = muxer->getDuration() / 1000.0f;
         // 关闭mp4可能非常耗时，所以要放在后台线程执行
+        TraceL << "Closing tmp mp4 file: " << full_path_tmp;
         muxer->closeMP4();
+        TraceL << "Closed tmp mp4 file: " << full_path_tmp;
         if (!full_path_tmp.empty()) {
             // 获取文件大小
-            info.file_size = File::fileSize(full_path_tmp.data());
+            info.file_size = File::fileSize(full_path_tmp);
             if (info.file_size < 1024) {
                 // 录像文件太小，删除之
-                File::delete_file(full_path_tmp.data());
+                File::delete_file(full_path_tmp);
                 return;
             }
             // 临时文件名改成正式文件名，防止mp4未完成时被访问
             rename(full_path_tmp.data(), full_path.data());
         }
+        TraceL << "Emit mp4 record event: " << full_path;
         //触发mp4录制切片生成事件
-        NoticeCenter::Instance().emitEvent(Broadcast::kBroadcastRecordMP4, info);
+        NOTICE_EMIT(BroadcastRecordMP4Args, Broadcast::kBroadcastRecordMP4, info);
     });
 }
 
