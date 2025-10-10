@@ -26,12 +26,14 @@ void FlvPlayer::play(const string &url) {
     setHeaderTimeout((*this)[Client::kTimeoutMS].as<int>());
     setBodyTimeout((*this)[Client::kMediaTimeoutMS].as<int>());
     setMethod("GET");
+    addCustomHeader(this);
     sendRequest(url);
 }
 
 void FlvPlayer::onResponseHeader(const string &status, const HttpClient::HttpHeader &header) {
     if (status != "200" && status != "206") {
-        // http状态码不符合预期
+        // http状态码不符合预期  [AUTO-TRANSLATED:2b6996f7]
+        // HTTP status code does not meet expectations
         throw invalid_argument("bad http status code:" + status);
     }
 
@@ -56,7 +58,8 @@ void FlvPlayer::onResponseCompleted(const SockException &ex) {
 
 void FlvPlayer::onResponseBody(const char *buf, size_t size) {
     if (!_benchmark_mode) {
-        // 性能测试模式不做数据解析，节省cpu
+        // 性能测试模式不做数据解析，节省cpu  [AUTO-TRANSLATED:53e4af73]
+        // Performance test mode does not parse data to save CPU
         FlvSplitter::input(buf, size);
     }
 }
@@ -72,6 +75,14 @@ void FlvPlayer::onRecvRtmpPacket(RtmpPacket::Ptr packet) {
         onPlayResult(SockException(Err_success, "play http-flv success"));
     }
     onRtmpPacket(std::move(packet));
+}
+
+size_t FlvPlayer::getRecvSpeed() {
+    return TcpClient::getRecvSpeed();
+}
+
+size_t FlvPlayer::getRecvTotalBytes() {
+    return TcpClient::getRecvTotalBytes();
 }
 
 }//mediakit

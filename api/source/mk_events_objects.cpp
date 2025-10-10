@@ -228,7 +228,8 @@ API_EXPORT mk_track API_CALL mk_media_source_get_track(const mk_media_source ctx
 API_EXPORT float API_CALL mk_media_source_get_track_loss(const mk_media_source ctx, const mk_track track) {
     assert(ctx);
     MediaSource *src = (MediaSource *)ctx;
-    // rtp推流只有一个统计器，但是可能有多个track，如果短时间多次获取间隔丢包率，第二次会获取为-1
+    // rtp推流只有一个统计器，但是可能有多个track，如果短时间多次获取间隔丢包率，第二次会获取为-1  [AUTO-TRANSLATED:b30fec2c]
+    // RTP streaming has only one statistics object, but there may be multiple tracks. If the packet loss rate is obtained multiple times in a short period, the second time will be obtained as -1
     return src->getLossRate((*((Track::Ptr *)track))->getTrackType());
 }
 
@@ -295,6 +296,13 @@ API_EXPORT int API_CALL mk_media_source_seek_to(const mk_media_source ctx,uint32
     MediaSource *src = (MediaSource *)ctx;
     return src->seekTo(stamp);
 }
+
+API_EXPORT void API_CALL mk_media_source_set_speed(const mk_media_source ctx, float speed) {
+    assert(ctx);
+    MediaSource *src = (MediaSource *)ctx;
+    src->getOwnerPoller()->async([=]() mutable {  src->speed(speed); });
+}
+
 API_EXPORT void API_CALL mk_media_source_start_send_rtp(const mk_media_source ctx, const char *dst_url, uint16_t dst_port, const char *ssrc, int con_type, on_mk_media_source_send_rtp_result cb, void *user_data) {
     mk_media_source_start_send_rtp2(ctx, dst_url, dst_port, ssrc, con_type, cb, user_data, nullptr);
 }
@@ -346,6 +354,7 @@ API_EXPORT void API_CALL mk_media_source_start_send_rtp4(const mk_media_source c
     args.close_delay_ms = (*ini_ptr)["close_delay_ms"].empty() ? 0 : (*ini_ptr)["close_delay_ms"].as<int>();
     args.rtcp_timeout_ms = (*ini_ptr)["rtcp_timeout_ms"].empty() ? 30000 : (*ini_ptr)["rtcp_timeout_ms"].as<int>();
     args.rtcp_send_interval_ms = (*ini_ptr)["rtcp_send_interval_ms"].empty() ? 5000 : (*ini_ptr)["rtcp_send_interval_ms"].as<int>();
+    args.enable_origin_recv_limit = (*ini_ptr)["enable_origin_recv_limit"].empty() ? false : (*ini_ptr)["enable_origin_recv_limit"].as<bool>();
     std::shared_ptr<void> ptr(
         user_data, user_data_free ? user_data_free : [](void *) {});
     src->getOwnerPoller()->async([=]() mutable {
@@ -608,7 +617,8 @@ API_EXPORT void API_CALL mk_rtc_send_datachannel(const mk_rtc_transport ctx, uin
     std::string msg_str(msg, len);
     std::weak_ptr<WebRtcTransport> weak_trans = transport->shared_from_this();
     transport->getPoller()->async([streamId, ppid, msg_str, weak_trans]() {
-        // 切换线程后再操作
+        // 切换线程后再操作  [AUTO-TRANSLATED:12d77fca]
+        // Operate after switching threads
         if (auto trans = weak_trans.lock()) {
             trans->sendDatachannel(streamId, ppid, msg_str.c_str(), msg_str.size());
         }

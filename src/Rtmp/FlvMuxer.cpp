@@ -13,7 +13,6 @@
 #include "Rtmp/utils.h"
 #include "Http/HttpSession.h"
 
-#define FILE_BUF_SIZE (64 * 1024)
 
 using namespace std;
 using namespace toolkit;
@@ -30,7 +29,8 @@ void FlvMuxer::start(const EventPoller::Ptr &poller, const RtmpMediaSource::Ptr 
     }
     if (!poller->isCurrentThread()) {
         weak_ptr<FlvMuxer> weak_self = getSharedPtr();
-        //延时两秒启动录制，目的是为了等待config帧收集完毕
+        // 延时两秒启动录制，目的是为了等待config帧收集完毕  [AUTO-TRANSLATED:d359f59d]
+        // Start recording after a delay of two seconds, the purpose is to wait for the config frame to be collected.
         poller->doDelayTask(2000, [weak_self, poller, media, start_pts]() {
             auto strong_self = weak_self.lock();
             if (strong_self) {
@@ -48,7 +48,7 @@ void FlvMuxer::start(const EventPoller::Ptr &poller, const RtmpMediaSource::Ptr 
     _ring_reader = media->getRing()->attach(poller);
     _ring_reader->setGetInfoCB([weak_self]() {
         Any ret;
-        ret.set(dynamic_pointer_cast<SockInfo>(weak_self.lock()));
+        ret.set(dynamic_pointer_cast<Session>(weak_self.lock()));
         return ret;
     });
     _ring_reader->setDetachCB([weak_self]() {
@@ -91,7 +91,8 @@ BufferRaw::Ptr FlvMuxer::obtainBuffer(const void *data, size_t len) {
 }
 
 void FlvMuxer::onWriteFlvHeader(const RtmpMediaSource::Ptr &src) {
-    //发送flv文件头
+    // 发送flv文件头  [AUTO-TRANSLATED:ee2c5556]
+    // Send the flv file header.
     auto buffer = obtainBuffer();
     buffer->setCapacity(sizeof(FLVHeader));
     buffer->setSize(sizeof(FLVHeader));
@@ -105,7 +106,8 @@ void FlvMuxer::onWriteFlvHeader(const RtmpMediaSource::Ptr &src) {
     header->length = htonl(FLVHeader::kFlvHeaderLength);
     header->have_video = src->haveVideo();
     header->have_audio = src->haveAudio();
-    //memset时已经赋值为0
+    // memset时已经赋值为0  [AUTO-TRANSLATED:0f71eef1]
+    // It has already been assigned to 0 during memset.
     //header->previous_tag_size0 = 0;
 
     //flv header
@@ -165,15 +167,18 @@ void FlvRecorder::startRecord(const EventPoller::Ptr &poller, const string &vhos
 
 void FlvRecorder::startRecord(const EventPoller::Ptr &poller, const RtmpMediaSource::Ptr &media,
                               const string &file_path) {
+    GET_CONFIG(uint32_t, flvBufSize, Record::kFileBufSize);
     stop();
     lock_guard<recursive_mutex> lck(_file_mtx);
-    //开辟文件写缓存
-    std::shared_ptr<char> fileBuf(new char[FILE_BUF_SIZE], [](char *ptr) {
+    // 开辟文件写缓存  [AUTO-TRANSLATED:22d1c17f]
+    // Allocate file write cache.
+    std::shared_ptr<char> fileBuf(new char[flvBufSize], [](char *ptr) {
         if (ptr) {
             delete[] ptr;
         }
     });
-    //新建文件
+    // 新建文件  [AUTO-TRANSLATED:f3d512a6]
+    // Create a new file.
     _file.reset(File::create_file(file_path, "wb"), [fileBuf](FILE *fp) {
         if (fp) {
             fflush(fp);
@@ -184,8 +189,9 @@ void FlvRecorder::startRecord(const EventPoller::Ptr &poller, const RtmpMediaSou
         throw std::runtime_error(StrPrinter << "打开文件失败:" << file_path);
     }
 
-    //设置文件写缓存
-    setvbuf(_file.get(), fileBuf.get(), _IOFBF, FILE_BUF_SIZE);
+    // 设置文件写缓存  [AUTO-TRANSLATED:a767e55c]
+    // Set the file write cache.
+    setvbuf(_file.get(), fileBuf.get(), _IOFBF, flvBufSize);
     start(poller, media);
 }
 

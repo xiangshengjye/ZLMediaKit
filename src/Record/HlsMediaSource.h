@@ -14,6 +14,7 @@
 #include "Common/MediaSource.h"
 #include "Util/TimeTicker.h"
 #include "Util/RingBuffer.h"
+#include "Network/Session.h"
 #include <atomic>
 
 namespace mediakit {
@@ -29,26 +30,42 @@ public:
 
     /**
      * 	获取媒体源的环形缓冲
+     * 	Get the circular buffer of the media source
+     
+     * [AUTO-TRANSLATED:75ac76b6]
      */
     const RingType::Ptr &getRing() const { return _ring; }
 
     /**
      * 获取播放器个数
+     * Get the number of players
+     
+     * [AUTO-TRANSLATED:a451c846]
      */
     int readerCount() override { return _ring ? _ring->readerCount() : 0; }
 
     /**
      * 设置或清空m3u8索引文件内容
+     * Set or clear the m3u8 index file content
+     
+     * [AUTO-TRANSLATED:71db921d]
      */
     void setIndexFile(std::string index_file);
 
     /**
      * 异步获取m3u8文件
+     * Asynchronously get the m3u8 file
+     
+     * [AUTO-TRANSLATED:e962b3ad]
      */
     void getIndexFile(std::function<void(const std::string &str)> cb);
 
     /**
      * 同步获取m3u8文件
+     * Synchronously get the m3u8 file
+     
+     
+     * [AUTO-TRANSLATED:52b228df]
      */
     std::string getIndexFile() const {
         std::lock_guard<std::mutex> lck(_mtx_index);
@@ -73,7 +90,7 @@ class HlsCookieData {
 public:
     using Ptr = std::shared_ptr<HlsCookieData>;
 
-    HlsCookieData(const MediaInfo &info, const std::shared_ptr<toolkit::SockInfo> &sock_info);
+    HlsCookieData(const MediaInfo &info, const std::shared_ptr<toolkit::Session> &session);
     ~HlsCookieData();
 
     void addByteUsage(size_t bytes);
@@ -90,6 +107,7 @@ private:
     toolkit::Ticker _ticker;
     std::weak_ptr<HlsMediaSource> _src;
     std::shared_ptr<toolkit::SockInfo> _sock_info;
+    std::weak_ptr<toolkit::Session> _session;
     HlsMediaSource::RingType::RingReader::Ptr _ring_reader;
 };
 

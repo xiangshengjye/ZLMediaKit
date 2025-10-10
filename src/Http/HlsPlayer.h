@@ -49,21 +49,32 @@ private:
     std::deque<std::pair<int64_t, std::function<void()> > > _frame_cache;
 };
 
-class HlsPlayer : public  HttpClientImp , public PlayerBase , public HlsParser{
+class HlsPlayer: public  HttpClientImp, public PlayerBase, public HlsParser {
 public:
     HlsPlayer(const toolkit::EventPoller::Ptr &poller);
 
     /**
      * 开始播放
      * start play
+     * Start playing
+     * start play
+     
+     * [AUTO-TRANSLATED:03d41cf7]
      */
     void play(const std::string &url) override;
 
     /**
      * 停止播放
      * stop play
+     * Stop playing
+     * stop play
+     
+     * [AUTO-TRANSLATED:88068dac]
      */
     void teardown() override;
+
+    size_t getRecvSpeed() override;
+    size_t getRecvTotalBytes() override;
 
 protected:
     /**
@@ -71,6 +82,12 @@ protected:
      * Received ts package
      * @param data ts数据负载 ts data payload
      * @param len ts包长度 ts package length
+     * Received ts package
+     * Received ts package
+     * @param data ts data payload
+     * @param len ts package length
+     
+     * [AUTO-TRANSLATED:159a6559]
      */
     virtual void onPacket(const char *data, size_t len) = 0;
 
@@ -90,7 +107,8 @@ private:
 
 private:
     struct UrlComp {
-        // url忽略？后面的参数
+        // url忽略？后面的参数  [AUTO-TRANSLATED:788784c3]
+        // url ignore? parameters after
         // Ignore the parameters after the url?
         bool operator()(const std::string& __x, const std::string& __y) const {
             return toolkit::split(__x,"?")[0] < toolkit::split(__y,"?")[0];
@@ -112,12 +130,17 @@ private:
     int _timeout_multiple = MIN_TIMEOUT_MULTIPLE;
     int _try_fetch_index_times = 0;
     int _ts_download_failed_count = 0;
+
+protected:
+    size_t _recvtotalbytes = 0;
 };
 
-class HlsPlayerImp : public PlayerImp<HlsPlayer, PlayerBase>, private TrackListener {
+class HlsPlayerImp final: public PlayerImp<HlsPlayer, PlayerBase>, private TrackListener {
 public:
     using Ptr = std::shared_ptr<HlsPlayerImp>;
     HlsPlayerImp(const toolkit::EventPoller::Ptr &poller = nullptr);
+    size_t getRecvSpeed() override;
+    size_t getRecvTotalBytes() override;
 
 private:
     //// HlsPlayer override////

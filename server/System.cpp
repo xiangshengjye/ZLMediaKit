@@ -15,6 +15,12 @@
 #if !defined(ANDROID)
 #include <execinfo.h>
 #endif//!defined(ANDROID)
+#else
+#include <fcntl.h>
+#include <io.h>
+#include <Windows.h>
+#include <DbgHelp.h>
+#pragma comment(lib, "DbgHelp.lib")
 #endif//!defined(_WIN32)
 
 #include <cstdlib>
@@ -134,17 +140,20 @@ void System::startDaemon(bool &kill_parent_if_failed) {
         pid = fork();
         if (pid == -1) {
             WarnL << "fork失败:" << get_uv_errmsg();
-            //休眠1秒再试
+            // 休眠1秒再试  [AUTO-TRANSLATED:00e5d7bf]
+            // Sleep for 1 second and try again
             sleep(1);
             continue;
         }
 
         if (pid == 0) {
-            //子进程
+            // 子进程  [AUTO-TRANSLATED:3f793797]
+            // Child process
             return;
         }
 
-        //父进程,监视子进程是否退出
+        // 父进程,监视子进程是否退出  [AUTO-TRANSLATED:0e13a34d]
+        // Parent process, monitor whether the child process exits
         DebugL << "启动子进程:" << pid;
         signal(SIGINT, [](int) {
             WarnL << "收到主动退出信号,关闭父进程与子进程";
@@ -162,9 +171,11 @@ void System::startDaemon(bool &kill_parent_if_failed) {
             int status = 0;
             if (waitpid(pid, &status, 0) >= 0) {
                 WarnL << "子进程退出";
-                //休眠3秒再启动子进程
+                // 休眠3秒再启动子进程  [AUTO-TRANSLATED:608448bd]
+                // Sleep for 3 seconds and then start the child process
                 sleep(3);
-                //重启子进程，如果子进程重启失败，那么不应该杀掉守护进程，这样守护进程可以一直尝试重启子进程
+                // 重启子进程，如果子进程重启失败，那么不应该杀掉守护进程，这样守护进程可以一直尝试重启子进程  [AUTO-TRANSLATED:0a336b0a]
+                // Restart the child process. If the child process fails to restart, the daemon process should not be killed. This allows the daemon process to continuously attempt to restart the child process.
                 kill_parent_if_failed = false;
                 break;
             }
@@ -204,9 +215,52 @@ void System::systemSetup(){
 #ifndef ANDROID
     signal(SIGSEGV, sig_crash);
     signal(SIGABRT, sig_crash);
-    //忽略挂起信号
+    // 忽略挂起信号  [AUTO-TRANSLATED:73e71e54]
+    // Ignore the hang up signal
     signal(SIGHUP, SIG_IGN);
 #endif// ANDROID
+#else
+    // 避免系统弹窗导致程序阻塞，适合无界面或后台服务场景。
+    SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX | SEM_NOOPENFILEERRORBOX);
+
+#if !defined(__MINGW32__)
+    // 将assert和error时错误输出
+    _CrtSetReportMode(_CRT_ASSERT, _CRTDBG_MODE_DEBUG);
+    _CrtSetReportMode(_CRT_ERROR, _CRTDBG_MODE_DEBUG);
+#endif
+
+    _setmode(0, _O_BINARY);
+    _setmode(1, _O_BINARY);
+    _setmode(2, _O_BINARY);
+
+    setvbuf(stdout, NULL, _IONBF, 0);
+    setvbuf(stderr, NULL, _IONBF, 0); 
+    std::ios_base::sync_with_stdio(false);
+
+      // 注册crash自动生成dump（等价core dump）
+    SetUnhandledExceptionFilter([](EXCEPTION_POINTERS *pException) -> LONG {
+        // 生成 dump 文件名，带时间戳
+        char dumpPath[MAX_PATH];
+        std::time_t t = std::time(nullptr);
+        std::tm tm;
+#ifdef _MSC_VER
+        localtime_s(&tm, &t);
+#else
+        tm = *std::localtime(&t);
+#endif
+        std::strftime(dumpPath, sizeof(dumpPath), "crash_%Y%m%d_%H%M%S.dmp", &tm);
+
+        HANDLE hFile = CreateFileA(dumpPath, GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+        if (hFile != INVALID_HANDLE_VALUE) {
+            MINIDUMP_EXCEPTION_INFORMATION mdei;
+            mdei.ThreadId = GetCurrentThreadId();
+            mdei.ExceptionPointers = pException;
+            mdei.ClientPointers = FALSE;
+            MiniDumpWriteDump(GetCurrentProcess(), GetCurrentProcessId(), hFile, MiniDumpNormal, &mdei, nullptr, nullptr);
+            CloseHandle(hFile);
+        }
+        return EXCEPTION_EXECUTE_HANDLER;
+    });
 #endif//!defined(_WIN32)
 }
 

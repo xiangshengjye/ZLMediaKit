@@ -38,33 +38,59 @@ public:
      * @param addr 数据源地址
      * @param dts_out 解析出最新的dts
      * @return 是否解析成功
+     * Input rtp
+     * @param is_udp Whether it is udp mode
+     * @param sock Local listening socket
+     * @param data Rtp data pointer
+     * @param len Rtp data length
+     * @param addr Data source address
+     * @param dts_out Parse out the latest dts
+     * @return Whether the parsing is successful
+     
+     * [AUTO-TRANSLATED:a10c5edf]
      */
     bool inputRtp(bool is_udp, const toolkit::Socket::Ptr &sock, const char *data, size_t len, const struct sockaddr *addr , uint64_t *dts_out = nullptr);
 
 
     /**
      * 超时时被RtpSelector移除时触发
+     * Triggered when removed by RtpSelector when timeout
+     
+     * [AUTO-TRANSLATED:dc4c6609]
      */
     void onDetach(const toolkit::SockException &ex);
 
     /**
      * 设置onDetach事件回调
+     * Set onDetach event callback
+     
+     * [AUTO-TRANSLATED:b30f67c3]
      */
     void setOnDetach(onDetachCB cb);
 
     /**
-     * 设置onDetach事件回调,false检查RTP超时，true停止
+     * 暂停或恢复rtp超时监测
+     * @param pause 是否暂停超时检测
+     * @param pause_seconds 暂停超时检测最大时间(单位秒)，超过这个时间后将恢复超时检测; 设置为0时默认为300
      */
-    void setStopCheckRtp(bool is_check=false);
+    void pauseRtpTimeout(bool pause, uint32_t pause_seconds = 0);
 
     /**
      * 设置为单track，单音频/单视频时可以加快媒体注册速度
      * 请在inputRtp前调用此方法，否则可能会是空操作
+     * Set to single track, single audio/single video can speed up media registration
+     * Please call this method before inputRtp, otherwise it may be a null operation
+     
+     * [AUTO-TRANSLATED:55095289]
      */
     void setOnlyTrack(OnlyTrack only_track);
 
     /**
      * flush输出缓存
+     * Flush output cache
+     
+     
+     * [AUTO-TRANSLATED:40618a29]
      */
     void flush() override;
 
@@ -74,6 +100,8 @@ public:
     std::string get_peer_ip() override;
     uint16_t get_peer_port() override;
     std::string getIdentifier() const override;
+
+    const toolkit::Socket::Ptr& getSock() const;
 
 protected:
     bool inputFrame(const Frame::Ptr &frame) override;
@@ -93,17 +121,19 @@ protected:
 private:
     RtpProcess(const MediaTuple &tuple);
 
-    void emitOnPublish();
+    void emitOnPublish(uint32_t ssrc);
     void doCachedFunc();
     bool alive();
     void onManager();
     void createTimer();
 
 private:
-    OnlyTrack _only_track = kAll;
-    std::string _auth_err;
+    bool _pause_timeout = false;
+    uint32_t _pause_seconds = 5 * 60;
     uint64_t _dts = 0;
     uint64_t _total_bytes = 0;
+    OnlyTrack _only_track = kAll;
+    std::string _auth_err;
     std::unique_ptr<sockaddr_storage> _addr;
     toolkit::Socket::Ptr _sock;
     MediaInfo _media_info;
@@ -113,7 +143,6 @@ private:
     std::shared_ptr<FILE> _save_file_video;
     ProcessInterface::Ptr _process;
     MultiMediaSourceMuxer::Ptr _muxer;
-    std::atomic_bool _stop_rtp_check{false};
     toolkit::Timer::Ptr _timer;
     toolkit::Ticker _last_check_alive;
     std::recursive_mutex _func_mtx;

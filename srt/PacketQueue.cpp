@@ -78,7 +78,8 @@ bool PacketQueue::inputPacket(DataPacket::Ptr pkt, std::list<DataPacket::Ptr> &o
     }
 
     while (_pkt_map.size() > _pkt_cap) {
-        // 防止回环
+        // 防止回环  [AUTO-TRANSLATED:5999c704]
+        // Prevent circular references
         it = _pkt_map.find(_pkt_expected_seq);
         if (it != _pkt_map.end()) {
             out.push_back(it->second);
@@ -232,7 +233,7 @@ std::string PacketQueue::dump() {
         printer << " last:" << _pkt_map.rbegin()->second->packet_seq_number;
         printer << " latency:" << timeLatency() / 1e3;
     }
-    return std::move(printer);
+    return printer;
 }
 
 //////////////////// PacketRecvQueue //////////////////////////////////
@@ -394,7 +395,7 @@ std::string PacketRecvQueue::dump() {
         printer << " start:" << _start;
         printer << " end:" << _end;
     }
-    return std::move(printer);
+    return printer;
 }
 bool PacketRecvQueue::drop(uint32_t first, uint32_t last, std::list<DataPacket::Ptr> &out) {
     uint32_t diff = 0;
